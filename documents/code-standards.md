@@ -212,6 +212,12 @@ tasks/starlink_cube_grasp/
 
 **反向要求**：同一个值不要在代码和 config 里各写一遍。以 config 为准，代码里读 config，不写默认常量。
 
+**一个豁免**：由第三方框架**按自己的路径约定**加载的配置文件，留在框架要求的位置。
+当前案例是 `starvla_overlay/examples/StarlinkCube/train_files/*.yaml`——`serve_starlink_cube_policy*.py`
+把 `.../examples/StarlinkCube/train_files/data_registry` 硬编码进 `sys.path`，整个
+`starvla_overlay/` 都在镜像 StarVLA 的结构。搬走这些文件会破坏约定和两个启动器。
+本条规则管的是**我们自己**加载的配置。
+
 ---
 
 ## 8. `documents/` 是规范的唯一来源

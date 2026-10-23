@@ -12,7 +12,7 @@ param(
     [string]$TargetHost = "10.110.10.12",
     [string]$TargetUser = "student",
     [string]$RemoteRoot = "/data/Yanhan/genesis",
-    [string[]]$Dirs = @("genesis_tools"),
+    [string[]]$Dirs = @("code"),
     [switch]$DryRun,
     [switch]$Force
 )
@@ -64,7 +64,7 @@ foreach ($d in $CodeDirs) {
     $localFiles = Get-ChildItem -Path $localDir -Recurse -File | Where-Object { $exts -contains $_.Extension }
     foreach ($lf in $localFiles) {
         $rel = $lf.FullName.Substring($localDir.Length + 1) -replace '\\', '/'
-        $remotePath = "$RemoteRoot/code/$d/$rel"
+        $remotePath = "$RemoteRoot/$d/$rel"
         $remotePaths.Add($remotePath)
         $localByPath[$remotePath] = $lf
     }
@@ -85,7 +85,7 @@ if ($remotePaths.Count -gt 0) {
         $lf = $localByPath[$remotePath]
         $remoteUtc = [DateTimeOffset]::FromUnixTimeSeconds([int64]$remoteEpoch).UtcDateTime
         if ($remoteUtc -gt $lf.LastWriteTimeUtc.AddSeconds(2)) {
-            $rel = $remotePath.Substring("$RemoteRoot/code/".Length)
+            $rel = $remotePath.Substring("$RemoteRoot/".Length)
             $clobber += ("{0}  (remote {1:u} > local {2:u})" -f $rel, $remoteUtc, $lf.LastWriteTimeUtc)
         }
     }
@@ -111,7 +111,13 @@ foreach ($d in $CodeDirs) {
     Write-Host "==> syncing $d ..."
     # -p preserves mtimes. Without it scp stamps the remote files with the transfer
     # time, which would make the newer-file guard above trip on every deploy.
-    & scp -p -o StrictHostKeyChecking=no -r (Join-Path $RepoRoot $d) "${sshTarget}:${RemoteRoot}/code/"
+    #
+    # NOTE: this copies the whole `code/` tree. The server currently still holds the
+    # PRE-restructure layout (code/starlink_cube_rl/, code/genesis_tools/, ...), so a
+    # run today adds code/tasks/ and code/bridges/ *beside* it rather than replacing
+    # it. The cut-over is a manual, reversible step documented in
+    # documents/README.en.md -- do not treat a deploy as the cut-over.
+    & scp -p -o StrictHostKeyChecking=no -r (Join-Path $RepoRoot $d) "${sshTarget}:${RemoteRoot}/"
     if ($LASTEXITCODE -ne 0) { throw "scp failed for $d" }
 }
 

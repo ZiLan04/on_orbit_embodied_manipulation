@@ -40,20 +40,27 @@ baseline episode-for-episode or it does not.
 code/
 ├── tasks/                        one directory per task
 │   ├── starlink_cube_grasp/      ★ main line: RL env, data collection, PPO, VLA closed loop
+│   │   ├── probes/               service and environment probes
+│   │   └── starvla_overlay/      StarVLA training / serving entry points and configs
 │   ├── starlink_satellite_grasp/ satellite-side stage-2 grasp pose
+│   │   └── probes/               reachability and workspace probes
 │   ├── franka_cube_grasp/        earlier Franka Panda + cube scene
 │   └── vla_jepa_probe/           retired JEPA line, kept for reference
-├── utils/                        cross-task helpers, split by purpose
-│   ├── geometry/                 reachability and IK probes
-│   └── io/                       service probes and log analysis
 └── bridges/
-    └── starvla_bridge/           Genesis ↔ StarVLA WebSocket bridge
+    └── starvla_bridge/           Genesis ↔ StarVLA WebSocket bridge (see note below)
 
 documents/                        binding standards; read before adding code
-docs/                             historical investigation and design notes
 deploy/                           one-way sync to the GPU server
 .agents/skills/                   agent skills that encode this pipeline
 ```
+
+There is deliberately **no `code/utils/`** yet. The code standards only create one when a
+second task actually needs the same code; today every reusable module has exactly one
+consumer, so it lives inside that task's directory.
+
+**`code/bridges/starvla_bridge/` is not ours alone.** It was written and is still
+maintained by another person on the GPU server, and the deploy script deliberately never
+syncs it. Treat it as a shared boundary: read it freely, change it only with the owner.
 
 **Start with `documents/code-map.en.md`** — it documents every file, how code reaches
 the server, and the two implicit path dependencies that will break any restructuring

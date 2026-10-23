@@ -55,14 +55,14 @@
 │   │   ├── franka_cube_grasp/          ← 早期 Franka + cube 场景
 │   │   └── vla_jepa_probe/             ← JEPA 线（已停用，留档）
 │   │
-│   ├── utils/                       ← 跨任务共享，按用途分子目录
+│   ├── utils/                       ← 跨任务共享（**按需创建，现在没有**）
 │   │   ├── control/                 ← 动作契约与控制器
 │   │   ├── data/                    ← LeRobot 导出与校验
 │   │   ├── sim/                     ← Genesis 共性：相机、headless 初始化、批量封装
 │   │   ├── geometry/                ← 位姿 / 四元数 / RPY / IK 辅助
 │   │   └── io/                      ← 文件、日志、录像
 │   │
-│   ├── third_party/                 ← vendored 第三方，不算我们的源码
+│   ├── third_party/                 ← vendored 第三方（**按需创建，现在没有**）
 │   │   └── starvla_overlay/starVLA/
 │   │
 │   ├── bridges/                     ← 与他人共管的边界
@@ -81,16 +81,52 @@
 **三条结构性要求**：
 
 1. `spaceman_core/` 永远在 `code/` 外面（现在已经是，保持）
-2. `code/` 里不出现上游代码，vendored 的放 `third_party/`
-3. 每个任务目录自带 `config/`；跨任务的放 `utils/`
+2. `code/` 里不放第三方源码。StarVLA 目前是外部依赖（见 §1.3），所以**现在没有
+   `third_party/`**——等真有东西必须 vendor 那天再建
+3. `utils/` **按需创建**，不是预先建好：等第二个任务真的需要同一份代码那天。在那之前
+   没有 `utils/`，每个模块都留在自己的任务目录里
 
 ---
 
-## 三、旧 → 新 迁移映射（提案）
+## 三、旧 → 新 迁移映射 —— 这是服务器切换计划，**不是仓库的待办**
 
-标 ✅ 是机械搬动、低风险；标 ⚠ 需要判断，**动手前先确认**。
+> **状态：本仓库已经是 §二 的目标布局。** 下面这份表是**动手之前写的提案**，实际执行时
+> 有两项被否掉了。它保留下来的唯一理由是：它是**服务器**切换的草图——服务器上真正在跑的
+> 仍是重构前的布局（`code/starlink_cube_rl/`、`code/genesis_tools/`、`code/franka_cube/`）。
+>
+> 先读下面两个框，再把表格当历史意图看。
 
-### 3.1 `code/starlink_cube_rl/` → `code/tasks/starlink_cube_grasp/`
+### 实际做了什么
+
+| 做了 | |
+|---|---|
+| `code/tasks/` 下一任务一目录 | 4 个任务 |
+| `code/bridges/starvla_bridge/` 独立存放 | 它是与他人共管的边界 |
+| 把探针脚本从一个本不该存在的 `utils/` 里挪出来 | 进 `tasks/*/probes/` |
+| 文件名一个没改 | 优先保证行为中性，见 §四 |
+| 没有 `third_party/`，没有 `config/` | 见下面两个框 |
+
+### 被明确否掉的三项，以及原因
+
+**`utils/control/delta_eef_control.py` —— 否掉。**五个模块
+（`delta_eef_control`、`task_contract`、`starlink_cube_delta_eef_env`、`gymnasium_adapter`、
+`sb3_vecenv_adapter`）被同目录下 16 个文件以**平铺顶层模块**方式 import。把其中任何一个搬
+到 `utils/`，那些 import 就会断，除非新路径也进 `PYTHONPATH`。而且按我们自己的规则，
+`utils/` 要等第二个任务需要它才建——现在每个模块都只有一个消费者。所以它们留在任务目录里
+一起。
+
+**给 StarVLA 的 YAML 建 `config/` —— 否掉。**`serve_starlink_cube_policy*.py` 把
+`<overlay>/examples/StarlinkCube/train_files/data_registry` 硬编码进 `sys.path`。这个布局是
+StarVLA 的约定，整个 `starvla_overlay/` 都在镜像框架自己的结构。搬走 YAML 会破坏这个约定
+和两个启动器。规范 §7 管的是**我们自己的**配置；这些是走别人路径约定加载的。
+
+**删掉 `run_starvla_genesis_bridge_7d_v2..v7.py` —— 按原方案做不到。**它们是一条依赖**链**
+（`v3` import `v2`，`v4` import `v3`……`v7` import `v6`），不是平行快照。删掉 `v2..v6`
+会打断 `v7`。合并它们是一次重构，需要单独验证。
+
+---
+
+### 3.1 `code/starlink_cube_rl/` → `code/tasks/starlink_cube_grasp/`（历史提案）
 
 | 现在 | 目标 | |
 |---|---|---|
@@ -144,28 +180,33 @@
 
 因为这个目录**由服务器侧的人维护**，`deploy.ps1` 明确排除它。搬动本身已经会影响到对方。建议先和对方确认再动。
 
-另外 `run_starvla_genesis_bridge_7d_v2..v7.py` 这八个版本快照应当清理——按规范 §5.2，版本号不进文件名。历史用 `backups/` 保留。
+另外 `run_starvla_genesis_bridge_7d_v2..v7.py` **不是八个可删的快照**，而是一条 import 链
+（`v3` import `v2`，…，`v7` import `v6`）。合并它们是一次需要单独验证的重构，不是清理。
+详见 `code-map.md` §0。
 
 ---
 
-## 四、迁移执行顺序
+## 四、服务器切换（尚未进行，是刻意的）
 
-先做不依赖判断的，再做需要决定的。**每一步都要能独立回退。**
+服务器上跑的是重构前的布局，**在明确批准之前保持原样**。真要切换时，是一次可回退的操作：
 
 ```
-第 0 步  全量备份：tar 一份整个 code/ 到 backups/code-YYYYMMDD.tar.gz
-         （服务器这棵树没有 git，这是唯一的退路）
-第 1 步  建目录骨架：code/tasks/ code/utils/ code/third_party/ code/backups/
-第 2 步  搬 utils/（低风险，被多任务共用；搬完逐个 import 检查）
-第 3 步  搬 tasks/starlink_cube_grasp/（当前主线；搬完跑 smoke，
-         再拿 runs/ 里一次既有评测复跑，逐回合结果必须一致）
-第 4 步  搬第三方 vendored 到 third_party/（要同时改 import 和启动脚本）
-第 5 步  搬其余任务目录（每个搬完跑该任务的 smoke）
-第 6 步  starvla_bridge（先和对方确认）
-第 7 步  更新 code-map.md，确认 deploy 路径也要跟着改
+第 0 步  把服务器整个 code/ tar 进 backups/（那边没有 git，这是唯一的退路）
+第 1 步  改名保留：code → code_<日期>_old（保留，不要删）
+第 2 步  把新树放到 code/，按 code-map.md §1.1 设置 PYTHONPATH
+第 3 步  别的不用改——deploy.ps1 已经指向新布局
+第 4 步  重跑四层验证（code-map.md §4）
+         通过判据：58/64，失败回合 [4, 29, 37, 46, 49, 59]
+第 5 步  确认无误后才删 code_<日期>_old
 ```
 
-**第 3 步的"逐回合结果必须一致"是可以真正验证的判据**：这个项目的评测在同种子下完全确定性（已验证：步数上限 128 vs 256 两次跑，64 回合逐回合结果完全一致）。不要用"看起来差不多"代替。
+**第 4 层是真正的判据，不是形式。**闭环评测在同种子下是确定性的：同一套种子，从旧布局和
+新布局跑出来，逐回合 `success`、`steps`、初始 `cube_position` 完全相同。就用这个比对，不要
+用"看起来差不多"。
+
+**StarVLA 是不能简单搬走的那一个。**它在服务器上位于旧树内部。既然我们不 vendor 它，切换后
+只有两条路：把它留在原处、把它的父目录放进 `PYTHONPATH`；或者搬到一个稳定的专用路径并更新
+文档里的 `PYTHONPATH`。这个决定在切换时做，不要提前定。
 
 **别忘了 deploy 路径**：结构搬完之后，`deploy.ps1` 的目标路径和 `Dirs` 参数必须同步改，否则下次 deploy 又会在旧位置造一份。
 

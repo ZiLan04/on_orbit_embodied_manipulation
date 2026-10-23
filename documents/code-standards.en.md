@@ -216,6 +216,8 @@ code/tasks/starlink_cube_grasp/
 
 **The reverse requirement**: never write the same value in both code and config. The config is authoritative; code reads it and does not carry a duplicate default.
 
+**One exemption.** Config files that a third-party framework loads **by its own path convention** stay where that framework expects them. `starvla_overlay/examples/StarlinkCube/train_files/*.yaml` is the current case: `serve_starlink_cube_policy*.py` hard-codes `.../examples/StarlinkCube/train_files/data_registry` on `sys.path`, and the whole `starvla_overlay/` tree mirrors StarVLA's structure. Relocating those files would break the convention and both launchers. This rule governs configs **we** load.
+
 ---
 
 ## 8. `documents/` is the single source of truth for standards

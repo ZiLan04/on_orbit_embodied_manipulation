@@ -56,14 +56,14 @@ The target form of `/data/Yanhan/genesis`, implementing the rules in `code-stand
 │   │   ├── franka_cube_grasp/          ← earlier Franka + cube scene
 │   │   └── vla_jepa_probe/             ← retired, kept for reference
 │   │
-│   ├── utils/                       ← cross-task code, split by purpose
+│   ├── utils/                       ← cross-task code (ON DEMAND — absent today, see note)
 │   │   ├── control/                 ← action contract and controllers
 │   │   ├── data/                    ← LeRobot export and validation
 │   │   ├── sim/                     ← shared Genesis concerns: cameras, headless init, batched wrappers
 │   │   ├── geometry/                ← poses, quaternions, RPY, IK helpers
 │   │   └── io/                      ← files, logs, video
 │   │
-│   ├── third_party/                 ← vendored third-party, not our source
+│   ├── third_party/                 ← vendored third-party (ON DEMAND — absent today)
 │   │   └── starvla_overlay/starVLA/
 │   │
 │   ├── bridges/                     ← shared-ownership boundary
@@ -82,16 +82,58 @@ The target form of `/data/Yanhan/genesis`, implementing the rules in `code-stand
 Three structural invariants:
 
 1. `spaceman_core/` always sits **outside** `code/`. It already does; keep it that way.
-2. No upstream code inside `code/`. Vendored frameworks go to `third_party/`.
-3. Every task directory carries its own `config/`; anything shared goes in `utils/`.
+2. No third-party source inside `code/`. StarVLA is currently an external dependency (§1.4),
+   so there is **no `third_party/` directory yet** — create it only if something ever has to
+   be vendored.
+3. `utils/` is created **on demand**, not up front: the day a second task needs the same
+   code. Until then there is no `utils/` at all, and every module lives in its task.
 
 ---
 
-## 3. Migration map
+## 3. Migration map — server cut-over plan, **not** a repo to-do list
 
-✅ = mechanical move, low risk. ⚠ = needs a judgement call; **confirm before moving**.
+> **Status. This repository is already in the target layout of §2.** What follows is a
+> *proposal that was written before the move* and then partly not followed, because two of
+> the moves turned out to be wrong. It is kept for one reason only: it is the sketch for the
+> still-pending **server** cut-over, where the pre-restructure layout
+> (`code/starlink_cube_rl/`, `code/genesis_tools/`, `code/franka_cube/`) is what actually
+> runs today.
+>
+> Read the two boxes below first, then treat the tables as historical intent.
 
-### 3.1 `code/starlink_cube_rl/` → `code/tasks/starlink_cube_grasp/`
+### What the repo actually did
+
+| done | |
+|---|---|
+| one directory per task under `code/tasks/` | 4 tasks |
+| `code/bridges/starvla_bridge/` in its own place | it is a shared boundary |
+| probes moved out of a `utils/` that should not have existed | into `tasks/*/probes/` |
+| filenames left unchanged | behaviour neutrality was the priority; see §4 |
+| no `third_party/`, no `config/` | see the two boxes below |
+
+### What was deliberately rejected, and why
+
+**`utils/control/delta_eef_control.py` — rejected.** Five modules
+(`delta_eef_control`, `task_contract`, `starlink_cube_delta_eef_env`, `gymnasium_adapter`,
+`sb3_vecenv_adapter`) are imported as *flat top-level modules* by 16 files in the same
+directory. Moving any one of them to `utils/` breaks those imports unless the new path also
+goes on `PYTHONPATH`. And by our own rule, `utils/` only exists once a second task needs the
+code — today each has exactly one consumer. So they stay together in the task directory.
+
+**`config/` for the StarVLA YAMLs — rejected.** `serve_starlink_cube_policy*.py` hard-codes
+`<overlay>/examples/StarlinkCube/train_files/data_registry` on `sys.path`. That layout is a
+StarVLA convention, and the whole `starvla_overlay/` tree mirrors the framework's own
+structure. Relocating the YAMLs would break the convention and both launchers. Rule §7 of the
+standards applies to configs *we* load; these load through someone else's path convention.
+
+**Deleting `run_starvla_genesis_bridge_7d_v2..v7.py` — impossible as written.** They are a
+dependency *chain* (`v3` imports `v2`, `v4` imports `v3`, … `v7` imports `v6`), not parallel
+snapshots. Deleting `v2..v6` breaks `v7`. Flattening them is a refactor with its own
+verification.
+
+---
+
+### 3.1 `code/starlink_cube_rl/` → `code/tasks/starlink_cube_grasp/` (historical proposal)
 
 | Now | Target | |
 |---|---|---|
@@ -147,32 +189,36 @@ Three structural invariants:
 
 This directory is maintained by someone else on the server, and `deploy.ps1` deliberately excludes it. Moving it already affects them — agree with them first.
 
-Separately, the eight `run_starvla_genesis_bridge_7d_v*.py` snapshots should be collapsed. Per `code-standards.en.md` §5.2, version numbers do not belong in file names; keep the history in `backups/`.
+Separately, `run_starvla_genesis_bridge_7d_v2..v7.py` are **not** eight snapshots to delete —
+they are a chain of imports (`v3` imports `v2`, … `v7` imports `v6`). Collapsing them is a
+refactor that needs its own verification; it is not a cleanup. See `code-map.en.md` §0.
 
 ---
 
-## 4. Order of execution
+## 4. Server cut-over (still pending — deliberate)
 
-Do the moves that need no judgement first. **Every step must be independently revertible.**
+The server runs the pre-restructure layout and is **kept that way** until the cut-over is
+explicitly approved. When it happens, it is one reversible sequence:
 
 ```
-Step 0   Full backup: tar the whole code/ into backups/code-YYYYMMDD.tar.gz
-         (there is no git here — this is the only fallback)
-Step 1   Create the skeleton: code/tasks/ code/utils/ code/third_party/ code/bridges/ code/backups/
-Step 2   Move utils/ (low risk, shared; check imports as you go)
-Step 3   Move tasks/starlink_cube_grasp/ (the main line)
-         then run the smoke tests, then re-run one existing evaluation from runs/
-         and require identical per-episode results
-Step 4   Move the vendored framework to third_party/
-         (imports and every launcher must change in the same step)
-Step 5   Move the remaining task directories (smoke test after each)
-Step 6   starvla_bridge — agree with the other person first
-Step 7   Update code-map.en.md, and update the deploy path to match
+Step 0   tar the whole server code/ into backups/   (no git there — this is the only fallback)
+Step 1   rename it aside: code -> code_<date>_old   (keep it, do not delete)
+Step 2   place the new tree at code/ and fix PYTHONPATH per code-map.en.md §1.1
+Step 3   fix nothing else -- deploy.ps1 already targets the new layout
+Step 4   re-run the four-level verification (code-map.en.md §4)
+         pass criterion: 58/64 and failures at episodes [4, 29, 37, 46, 49, 59]
+Step 5   only then remove code_<date>_old
 ```
 
-**Step 3's "identical per-episode results" is a real check, not a formality.** Evaluation here is fully deterministic under a fixed seed — measured: the same seed set at step cap 128 and at step cap 256 produced identical results across all 64 episodes, episode by episode. Do not substitute "looks about the same".
+**Level 4 is the real check, not a formality.** The closed-loop evaluation is deterministic
+under a fixed seed: the same seed set produced identical per-episode `success`, `steps` and
+initial `cube_position` from both the old and the new layout. Use exactly that comparison;
+do not substitute "looks about the same".
 
-**Do not forget the deploy path.** Once the structure moves, `deploy.ps1`'s `Dirs` parameter and its target path must change in the same commit — otherwise the next deploy recreates the old layout beside the new one.
+**StarVLA is the one thing that cannot simply be moved.** It lives inside the old tree on the
+server. Since we are not vendoring it, after the cut-over either leave that subtree where it
+is and put its parent on `PYTHONPATH`, or move it to a stable dedicated path and update the
+documented `PYTHONPATH`. Decide this at cut-over time, not before.
 
 ---
 
