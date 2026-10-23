@@ -1,0 +1,36 @@
+# --- external dependencies, provided by the deployment environment ----------
+# Vendored StarVLA framework: the policy service always runs on the server at a
+# fixed path, so it is a runtime dependency, not something this repo distributes.
+**/starvla_overlay/starVLA/
+
+# Upstream simulation tree, synced from the Genesis machine, read-only.
+spaceman_core/
+
+# Run outputs
+runs/
+
+# --- local artifacts -------------------------------------------------------
+backups/
+.staging/
+
+# --- python ----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# --- secrets: never commit -------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# --- build / archives / misc ----------------------------------------------
+node_modules/
+dist/
+build/
+*.tar.gz
+*.zip
+*.log
+.DS_Store
+Thumbs.db

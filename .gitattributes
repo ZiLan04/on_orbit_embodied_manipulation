@@ -1,0 +1,8 @@
+# 部署目标是 Linux，强制工作区使用 LF，避免 \r 污染
+* text=auto eol=lf
+
+# 二进制
+*.png binary
+*.jpg binary
+*.pdf binary
+*.docx binary
